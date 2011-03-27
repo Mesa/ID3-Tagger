@@ -11,9 +11,21 @@ Why did I write a MP3 class?
 
 I write my MP3 class for fun, it was never made for production purpose. 
 The goal of this class was to test my PHP skill and to learn about some binary stuff in PHP. 
-If you have an idea how I can improve this class, please let me know.
+If you have an idea how I can improve or extend this class, please let me know.
 
 
+Important:
+----------
+This class is not complete or finish, there are many functions I still have not implemented.
+For Example:
+- All header flags are not recognized and will be ignored
+- Frame parsing is still incomplete
+- error handling doesn't exist
+- and many more
 
 
-
+Todo:
+-----
+- translate documentation in english
+- create some demo files, to show how this class has to be used
+- create a wiki in github
