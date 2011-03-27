@@ -1,4 +1,18 @@
 <?php
+/**
+ * 
+ * @author:      Mesa
+ * @copyright:   
+ * @version:     0.1 [BETA]
+ * 
+ * The goal of this class was to test my PHP skill with binary stuff. 
+ * I never purposed to publish the code or use it. It was a proof of concept and
+ * there is a lot of work that has to be done until this class will fit my expectations.
+ * 
+ *  But feel free to improve or extend the code. Feedback is welcome.
+ */
+
+
 
 define("FLAG_HEADER_UNSYNC",128);
 define("FLAG_HEADER_EXTENDED",64);
@@ -10,57 +24,55 @@ define("ID3_PADDING_MAX_SIZE",2000);
 
 class ID3Tag
 {
-	/**
-	 *
-	 */
 	private $log = null;
 	/**
-	 * Enthält alle ID3Tag Daten
+	 * Contains all Information of the MP3-File
 	 *
 	 * @var [ARRAY]
 	 */
 	public $ID3_tags = array();
 
    /**
-    * Regulärer Ausdruck um anhand des Tag Namen diesen beim Speichern auszulassen
+    * RegEx to ignore a tag. If MP3-tag will be saved, all data from the ignored tags are lost.
     * @var [REG EX]
     */
     private $ignoreTags = '/1111/i';
 	/**
-	 * Dateizeiger auf die MP3 Datei
+	 * Filehandle of the MP3 File
 	 *
 	 */
 	private $file_handle = null;
 
 	/**
-	 * Alle Dateitypen die ID3Tags enthalten
+	 * File extensions where a ID2-tag can be found.
 	 *
 	 * @var [ARRAY]
 	 */
 	private $file_types = array( "mp3", "wma");
 
 	/**
-	 * Pfad zu der Datei die geöffnet und bearbeitet werden soll
+	 * Path to MP3 File
 	 *
 	 * @var [STRING]
 	 */
 	private $path_to_file;
 
 	/**
-	 * Pfad und Name der neuen Datei die gespeichert werden soll
+	 * Path and Name of the new File, which will be created, while saving tag data.
 	 *
-	 * @var unknown_type
+	 * @var [STRING]
 	 */
 	public $new_filename = null;
+	
 	/**
-	 * Enthält alle Fehlermeldungen fürs Debuggen
+	 * Contains all error messages, for debugging purposes only.
 	 *
 	 * @var [ARRAY] = [STRING]
 	 */
 	public $errors	= array();
 
 	/**
-	 * Enthält alle Größenangaben zu der MP3 Datei die benötigt werden
+	 * All Sizes from File, Tag, etc...
 	 *
 	 * @var [ARRAY]
 	 */
@@ -70,21 +82,22 @@ class ID3Tag
 		"total_padding"		=> 0,
 		"file_size" 		=> 0 );
 	/**
-	 * Logging an oder ausschalten
+	 * Switch logging on or off.
+	 * Default is off. You need a class or a function to get some feedback.
 	 *
 	 * @var [BOOL]
 	 *
-	 * 	false = aus
-	 *  true  = an
+	 * 	false = off
+	 *  true  = on
 	 */
-	public $logging = true;
+	public $logging = false;
+	
 	/**
-	 *
-	 * @param [STRING] $path_to_file  (Absoluter Pfad zu der MP3 Datei)
+	 * @param [STRING] $path_to_file
 	 */
 	public function __construct($path_to_file)
 	{
-		if( $this->log == NULL and $this->logging === true)
+		if( $this->log == NULL and $this->logging === true )
 		{
 			$this->log = ScreenLog::getInstanceOf();
 		}
@@ -92,7 +105,7 @@ class ID3Tag
 		if( file_exists($path_to_file) )
 		{
 
-			if(true === $this->logging )
+			if( true === $this->logging )
 			{
 				$this->log->addMsg( "[DATEI]\t $path_to_file geladen..." );
 			}
@@ -113,7 +126,7 @@ class ID3Tag
 				fclose($this->file_handle);
 			} else {
 				/**
-				 * Die angegebene Dateiendung ist nicht in dem Array $this->file_types enthalten.
+				 * The expected file extension was no found in Array $this->file_types.
 				 */
 				$this->errors[] = "Es werden nur Dateien mit der Endung <".implode($this->file_types,", ")."> bearbeitet und nicht <".$this->ID3_tags["extension"].">";
 				if(true === $this->logging )
@@ -124,7 +137,7 @@ class ID3Tag
 			}
 		} else {
 			/**
-			 * Die Datei existiert nicht.
+			 * The file doesn't exist.
 			 */
 			$this->errors[] = "Die Datei existiert nicht <$path_to_file>";
 
@@ -137,8 +150,8 @@ class ID3Tag
 
         /**
          *
-         * @param [STRING] $name == Name des Tags
-         * @param [STRING/INTEGER] $data == Daten die Gespeichert werden sollen
+         * @param [STRING] $name == Name of the tag
+         * @param [STRING/INTEGER] $data == Data to save.
          */
 	public function addTag($name,$data)
     {
@@ -149,16 +162,17 @@ class ID3Tag
 
     	if( preg_match('/^[A-Z][A-Z0-9]{3}$/', $name))
     	{
-    		if($this->logging === true)
+    		if( true === $this->logging )
     		{
     			$this->log->addMsg( "[$name] - {$data} hinzugefügt" );
     		}
+    		
             $this->ID3_tags[$name]["data"] = $data;
     	}
     }
 
         /**
-         * Speichert alle Frames in der Datei und überschreibt dabei die alten Daten
+         * Save all frames to file and overwrite the old data.
          */
 	public function saveTags()
 	{
@@ -179,28 +193,31 @@ class ID3Tag
          	}
 		}
 		/**
-		 * ID3V2.4 Header erstellen
+		 * ID3V2.4 create Header
 		 *  STRING: ID3
 		 *  HEX:	4
-		 *  Hex:	0
+		 *  HEX:	0
 		 *  Flag:	0
 		 *
 		 */
 		$header_data 		= "ID3".pack('h',0x04).pack('h',0x00).pack('C',decbin(0));
 		$new_data_length 	= strlen( $tag_data ) + strlen( $header_data );
 
+		/**
+		 * Check for given Header size in file. 
+		 */
 		if( $new_data_length > $this->size["total_tag_size"] or $this->size["total_padding"] < ID3_PADDING_MIN_SIZE or $this->size["total_padding"] > ID3_PADDING_MAX_SIZE )
 		{
 			/**
-			 * Padding reicht nicht aus oder ist zu groß
-			 * Datei neu schreiben mit ID3_PADDING_MAX_SIZE / 2
+			 * Not enough padding or to large padding.
+			 * create new file with ID3_PADDING_MAX_SIZE / 2
 			 */
 
 			$this->overwriteFile($header_data,$tag_data);
 		} else {
 			/**
-			 * Padding reicht aus
-			 * alten Header überschreiben
+			 * Enough padding.
+			 * Overwrite old header
 			 */
 			$this->extendFile($header_data, $tag_data);
 		}
@@ -208,8 +225,10 @@ class ID3Tag
 
 	private function extendFile($header_data, $tag_data)
 	{
+		
 		$file_handle 	= fopen( $this->path_to_file , 'r+b');
-		if($this->logging === true)
+		
+		if( true === $this->logging )
 		{
 			$this->log->addMsg( "[SPECIHERN] Alte Daten werden überschrieben..." );
 		}
@@ -221,8 +240,7 @@ class ID3Tag
 
 		$header_data .= $this->dec2syncbin(strlen($tag_data));
 		/**
-		 * Position wieder auf den Anfang setzen damit
-		 * keine Audiodaten überschrieben werden
+		 * Set pointer to beginning of file
 		 */
 		fseek($file_handle, 0, SEEK_SET);
 		fwrite($file_handle,$header_data.$tag_data);
@@ -240,16 +258,18 @@ class ID3Tag
 		{
 			$this->log->addMsg( "[SPECIHERN] Datei wird neu erstellt..." );
 		}
-		#$tmp_file	= 'C:/Users/Mesa/Desktop/php Files/ID3Tag/xxx_'.md5( basename($this->path_to_file).mktime().microtime() ).'.mp3';
 
 
-			fseek($file_handle,$this->size["total_tag_size"], SEEK_SET);
-			$audio_data = fread($file_handle,$this->size["file_size"]);
-			fclose($file_handle);
-			for($i=0; $i <= round(ID3_PADDING_MAX_SIZE / 2) ; $i++)
-			{
-				$tag_data .= pack('h',0x00);
-			}
+		fseek( $file_handle,$this->size["total_tag_size"], SEEK_SET );
+
+		$audio_data = fread( $file_handle,$this->size["file_size"] );
+
+		fclose( $file_handle );
+
+		for( $i=0; $i <= round(ID3_PADDING_MAX_SIZE / 2) ; $i++ )
+		{
+			$tag_data .= pack('h',0x00);
+		}
 
 			$header_data .= $this->dec2syncbin(strlen($tag_data));
 
