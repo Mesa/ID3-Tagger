@@ -519,7 +519,7 @@ class ID3Tag
 		}
 
 		/**
-		 * wenn die gesammtgröße - gesammt größe der frame - Header (10byte) !== total padding ist
+		 * wenn die gesammtgröße - gesammt größe der frames - Header (10byte) !== total padding ist
 		 * ist die angegebene größe falsch
 		 *
 		 */
