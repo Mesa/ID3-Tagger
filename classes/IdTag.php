@@ -122,9 +122,14 @@ class IdTag
                 $new_tag = $header . $data;
 
                 fseek($this->file_handle, $old_tag_size);
-                $musik_bin = fread($this->file_handle, filesize($this->file_name));
-                fseek($this->file_handle,0);
-                fwrite($this->file_handle,$new_tag . $this->createPadding($this->new_padding) . $musik_bin);
+                $this->file_size = filesize($this->file_name);
+                if ( $this->file_size > 0 ) {
+                    $musik_bin = fread($this->file_handle, $this->file_size);
+                    fseek($this->file_handle,0);
+                    fwrite($this->file_handle,$new_tag . $this->createPadding($this->new_padding) . $musik_bin);
+                } else {
+                    echo "grml, Filesize was zero.";
+                }
                 fclose($this->file_handle);
                 $this->file_handle = null;
             }
@@ -415,37 +420,21 @@ class IdTag
      *
      * @return [INTEGER]
      */
-    protected function syncbin2dec ( $syncbin )
+    protected function syncbin2dec ( $sync )
     {
-        $true_value = "";
-        $enc_syncbin = unpack('N', $syncbin);
+        $sync_length = strlen($sync);
+        $bin = 0;
 
-//        foreach ($enc_syncbin as $bin_value) {
-//            $true_value .= decbin($bin_value);
-//        }
-
-        $true_value .= decbin($enc_syncbin[1]);
-
-        $bin_str = "";
-        for ($i = 0; $i < strlen($true_value); $i++) {
-            $dump = substr($true_value, -1 - $i, 1);
-
-
-            if (is_int($i / 7) and $i > 0) {
-                /**
-                 * Sollte doch eine Eins vorkommen und der Binärwert dadurch nicht Syncsafe sein
-                 * den unveränderten String ausgeben
-                 */
-                if ($dump == "1") {
-                    $bin_str = $true_value;
-                    break;
-                }
+        for ( $i = 0; $i < $sync_length; $i++ ) {
+            $data = unpack('c', substr($sync, $i, 1));
+            if ( $data[1] >= 128 ) {
+                echo "Syncsafe byte could not be greater than 128 in Tagsize.";
             } else {
-                $bin_str = $dump . $bin_str;
+                $bin += $data[1] << 7 * ( $sync_length - $i - 1 );
             }
-        }
+        };
 
-        return bindec($bin_str);
+        return $bin;
     }
 
     /**
@@ -453,26 +442,24 @@ class IdTag
      * (Besonderheit ist das die 8. Stelle IMMER "0" ist)
      *
      * @param [Integer] $bin Dezimalwert der in einen Syncsafe Binärwert umgewandelt werden soll (vorzeichenloser Long-Typ (immer 32 Bit, Byte-Folge Big Endian) )
+     *
+     * @return 32 Bit Binary
      */
-    protected function dec2syncbin ( $bin )
+    protected function dec2syncbin ( $dec )
     {
-        $bin_data = decbin($bin);
-        $syncsafe_bin = null;
-
-        for ($i = 0; $i < strlen($bin_data); $i++) {
-            $dump = (int) substr($bin_data, -1 - $i, 1);
-
-            if (is_int(strlen($syncsafe_bin) / 7) and $i > 0) {
-                $syncsafe_bin = $dump . "0" . $syncsafe_bin;
-            } else {
-                $syncsafe_bin = $dump . $syncsafe_bin;
-            }
+        /**
+        * alle 7 Bits auf 1 setzen
+        */
+        $byte_length = strlen(decbin($dec));
+        $mask = 127;
+        $bin = 0;
+        for ($i=0; $i < $byte_length / 7; $i++) {
+            $tmp = $dec;
+            $tmp2 = $tmp & ($mask << 7 * $i);
+            $bin += $tmp2 << 1 * $i;
         }
 
-        /**
-         *  Convert string with binary layout (100110) to dec and then to binary
-         */
-        return pack('N', base_convert($syncsafe_bin, 2, 10));
+        return pack('N', $bin);
     }
 
     protected function bin2Int ( $bin )
