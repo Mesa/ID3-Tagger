@@ -8,11 +8,10 @@ class IdTag
 {
 
     /**
-     * Contains all existing ID tags
+     * Contains all existing frames from the ID Tag
      * @var [Array] ID tags
      */
     protected $frames           = array();
-    protected $file_path        = null;
     protected $tag_version      = null;
     protected $tmp_file_name    = "tmp_";
     protected $tag_size         = null;
@@ -30,9 +29,9 @@ class IdTag
      */
     protected $file_handle      = null;
     protected $file_extension   = null;
-    protected $file_name        = null;
-    protected $dir_name         = null;
-    protected $path_to_file     = null;
+    protected $file_path        = null;
+//    protected $dir_name         = null;
+//    protected $path_to_file     = null;
     protected $file_size        = null;
 
     /**
@@ -63,87 +62,112 @@ class IdTag
     const UTF16ENCODING2        = 2;
 
     protected $header_flag_usync = false;
-    protected $header_flag_ext  = false;
-    protected $header_flag_exp  = false;
-    protected $header_flag_footer = false;
+    protected $header_flag_ext   = false;
+    protected $header_flag_exp   = false;
+    protected $header_flag_footer= false;
 
     const HEADER_FLAG_USYNC     = 128;
     const HEADER_FLAG_EXT       = 64;
     const HEADER_FLAG_EXP       = 32;
     const HEADER_FLAG_FOOTER    = 16;
 
+    protected $remove_v1        = false;
+    protected $has_tag_v1       = false;
+    protected $has_tag_v2       = false;
+
     public function getAllFrames ()
     {
         return $this->frames;
     }
 
+    public function setV1TagHandling ( $action )
+    {
+        if ( strtolower($action) == "remove") {
+            $this->remove_v1 = true;
+        } else {
+            $this->remove_v1 = false;
+        }
+
+    }
+
     public function saveTag ( $array )
     {
-        if (is_array($array)) {
-
-            $header = "ID3";
-            $header .= pack('hhC', 0x04, 0x00, decbin(0));
-            $data = "";
-            foreach ($array as $frame) {
-                $tmp = $this->writeFrame($frame);
-                if ($tmp !== false) {
-                    $data .= $tmp;
+        if ($array != $this->frames or ($this->has_tag_v2 == false and $this->has_tag_v1 == true )) {
+           /**
+            * only write changes to file, if Array has changed. Or data is from
+            * Tag V1.
+            */
+                $header = "ID3";
+                $header .= pack('hhc', 0x04, 0x00, decbin(0));
+                $data = "";
+                foreach ($array as $frame) {
+                    $tmp = $this->writeFrame($frame);
+                    if ($tmp !== false) {
+                        $data .= $tmp;
+                    }
+                    $tmp = "";
                 }
-                $tmp = "";
-            }
-            $old_tag_size = $this->tag_size;
+                $old_tag_size = $this->tag_size;
 
-//            $header .= $this->dec2syncbin(strlen($data) + 10);
-//            $new_tag = $header . $data;
-//            $new_tag_length = strlen($new_tag);
-            $new_tag_length = strlen($data) + 10;
+                $new_tag_length = strlen($data) + 10;
 
-            if ($new_tag_length <= $old_tag_size) {
-                /**
-                 * There is enough space for the new id tag
-                 * reset filepointer and write our new tag.
-                 *
-                 */
-                $spacing = $old_tag_size - $new_tag_length;
+                if ($new_tag_length <= $old_tag_size) {
+                    /**
+                    * There is enough space for the new id tag
+                    * reset filepointer and write our new tag.
+                    */
+                    $spacing = $old_tag_size - $new_tag_length;
 
-                $header .= $this->dec2syncbin($old_tag_size);
-                $new_tag = $header . $data;
+                    $header .= $this->dec2syncbin($old_tag_size);
+                    $new_tag = $header . $data;
 
-                fseek($this->file_handle, 0);
-                fwrite($this->file_handle, $new_tag . $this->createPadding($spacing), $new_tag_length);
-                fclose($this->file_handle);
-                $this->file_handle = null;
-            } elseif ($new_tag_length > $old_tag_size) {
-                /**
-                 * Not enough space, create new file with more padding
-                 */
+                    fseek($this->file_handle, 0);
+                    fwrite($this->file_handle, $new_tag . $this->createPadding($spacing), $old_tag_size);
+//                    fclose($this->file_handle);
+                    $this->file_handle = null;
+                } elseif ($new_tag_length > $old_tag_size) {
+                    /**
+                    * Not enough space, create new file with more padding
+                    */
 
-                $header .= $this->dec2syncbin(strlen($data) + 10 + $this->new_padding);
-                $new_tag = $header . $data;
+                    $header .= $this->dec2syncbin(strlen($data) + 10 + $this->new_padding);
+                    $new_tag = $header . $data;
 
-                fseek($this->file_handle, $old_tag_size);
-                $this->file_size = filesize($this->file_name);
-                if ( $this->file_size > 0 ) {
-                    $musik_bin = fread($this->file_handle, $this->file_size);
-                    fseek($this->file_handle,0);
-                    fwrite($this->file_handle,$new_tag . $this->createPadding($this->new_padding) . $musik_bin);
-                } else {
-                    echo "grml, Filesize was zero.";
+                    fseek($this->file_handle, $old_tag_size);
+                    $this->file_size = filesize($this->file_path);
+
+                    if ( $this->file_size > 0 ) {
+                        $musik_bin = fread($this->file_handle, $this->file_size);
+                        rewind($this->file_handle);
+                        fwrite($this->file_handle,$new_tag . $this->createPadding($this->new_padding) . $musik_bin);
+                    } else {
+                        echo "\ngrml, Filesize was zero. Skipped changes for $this->file_path $this->file_path\n";
+                    }
+//                    fclose($this->file_handle);
+                    $this->file_handle = null;
                 }
-                fclose($this->file_handle);
-                $this->file_handle = null;
-            }
-
-            return $new_tag_length;
+                echo "W";
         } else {
+            if ($this->removeV1Tag()) {
+                echo "R";
+            } else {
+                echo ".";
+            }
+        }
+    }
 
+    protected function removeV1Tag()
+    {
+        if ($this->has_tag_v1 && $this->remove_v1) {
+            return ftruncate($this->file_handle, filesize($this->file_path) - 128);
+        } else {
+            return false;
         }
     }
 
     protected function writeFrame ( $array )
     {
-        if (
-            isset($array["tag_name"])
+        if (isset($array["tag_name"])
             and isset($array["tag_body"])
             and strlen($array["tag_name"]) == 4
             and strlen($array["tag_body"]) > 0
@@ -208,6 +232,8 @@ class IdTag
 
     /**
      * Reset all data for new File.
+     *
+     * @return void
      */
     protected function resetData ()
     {
@@ -218,27 +244,42 @@ class IdTag
         $this->tag_padding          = 0;
         $this->frames               = array();
         $this->file_path            = null;
-        /**
-         * @todo write frame changes to file
-         */
+        $this->has_tag_v1           = false;
+
         if ($this->file_handle != null) {
             fclose($this->file_handle);
             $this->file_handle = null;
         }
     }
 
+    /**
+     * Load complete Tag from <$file_path>
+     *
+     * @param [String] $file_path Path to mp3 file.
+     *
+     * @throws IdTagException
+     */
     public function loadTags ( $file_path )
     {
         if (file_exists($file_path)) {
-            if (is_writable($file_path)) {
+            if (is_readable($file_path) and is_writable($file_path)) {
                 $this->resetData();
                 $this->file_path = $file_path;
                 $this->file_handle = fopen($file_path, "r+");
+                /**
+                 * load Tag V1 first and if V2.4 exist overwrite loaded information.
+                 */
+                $this->loadTagV1();
                 $this->loadHeader();
-                while ($this->readFrame()) {
-
+                if ($this->has_tag_v2) {
+                    while ($this->readFrame()) {
+                    }
+                    $this->getPadding();
+                } else {
+                    /**
+                     * no Tag found.
+                     */
                 }
-                $this->getPadding();
             } else {
                 throw new IdTagException("File is not writeable " . $file_path);
             }
@@ -247,6 +288,38 @@ class IdTag
         }
     }
 
+    protected function loadTagV1 ()
+    {
+        fseek($this->file_handle, -128, SEEK_END);
+        if ("TAG" == fread($this->file_handle, 3) ) {
+            $this->has_tag_v1 = true;
+
+            $title = fread($this->file_handle, 30);
+            $this->frames["TIT2"]["tag_body"] = $title;
+
+            $artist = fread($this->file_handle, 30);
+            $this->frames["TPE1"]["tag_body"] = $artist;
+
+            $album = fread($this->file_handle, 30);
+            $this->frames["TALB"]["tag_body"] = $album;
+
+            $year = fread($this->file_handle, 4);
+            $this->frames["TYER"]["tag_body"] = $year;
+
+            $comment = fread($this->file_handle, 30);
+            $this->frames["TALB"]["tag_body"] = $comment;
+        } else {
+            $this->has_tag_v1 = false;
+        }
+        rewind($this->file_handle);
+    }
+    /**
+     * Create a hex string with <$size> length
+     *
+     * @param [Integer] $size How long should be the string
+     *
+     * @return [Integer] Hex string
+     */
     protected function createPadding ( $size )
     {
         $data = "";
@@ -256,6 +329,9 @@ class IdTag
         }
         return $data;
     }
+    /**
+     * Count padding after Tag. Padding is always a hex zero.
+     */
     protected function getPadding ()
     {
         while ($this->readFromFile(1, "hex") == 0) {
@@ -269,32 +345,39 @@ class IdTag
     protected function loadHeader ()
     {
         $version = $this->readFromFile(3, "string");
-        $version2 = (int) $this->readFromFile(1, "hex");
 
-        if ($version == "ID3" and $version2 > 0) {
+        if ($version == "ID3") {
+            $version2 = (int) $this->readFromFile(1, "hex");
+            if ($version2 > 0) {
+
             $this->tag_version
                 = "ID3.2" . $version2 . $this->readFromFile(1, "hex");
-        }
-        $flags = $this->readFromFile(1);
+            }
+            $flags = $this->readFromFile(1);
 
-        if ($flags & IdTag::HEADER_FLAG_USYNC == IdTag::HEADER_FLAG_USYNC) {
-            $this->header_flag_usync = true;
-        }
+            if ($flags & IdTag::HEADER_FLAG_USYNC == IdTag::HEADER_FLAG_USYNC) {
+                $this->header_flag_usync = true;
+            }
 
-        if ($flags & IdTag::HEADER_FLAG_EXT == IdTag::HEADER_FLAG_EXT) {
-            $this->header_flag_ext = true;
-            $this->readExtHeader();
-        }
+            if ($flags & IdTag::HEADER_FLAG_EXT == IdTag::HEADER_FLAG_EXT) {
+                $this->header_flag_ext = true;
+                $this->readExtHeader();
+            }
 
-        if ($flags & IdTag::HEADER_FLAG_EXP == IdTag::HEADER_FLAG_EXP) {
-            $this->header_flag_exp = true;
-        }
+            if ($flags & IdTag::HEADER_FLAG_EXP == IdTag::HEADER_FLAG_EXP) {
+                $this->header_flag_exp = true;
+            }
 
-        if ($flags & IdTag::HEADER_FLAG_FOOTER == IdTag::HEADER_FLAG_FOOTER) {
-            $this->header_flag_footer = true;
-        }
+            if ($flags & IdTag::HEADER_FLAG_FOOTER == IdTag::HEADER_FLAG_FOOTER) {
+                $this->header_flag_footer = true;
+            }
 
-        $this->tag_size = $this->readFromFile(4, "sync");
+            $this->tag_size = $this->readFromFile(4, "sync");
+            $this->has_tag_v2 = true;
+        } else {
+            $this->has_tag_v2 = false;
+            $this->tag_version = "";
+        }
     }
 
     protected function readFrame ()
@@ -326,6 +409,11 @@ class IdTag
         }
     }
 
+    /**
+     * Create Array from Tag frame.
+     *
+     * @return [Array]
+     */
     protected function readTextFrame ( $data )
     {
         $tag["tag_enc"] = $this->hex2int(substr($data, 0, 1));
@@ -394,22 +482,34 @@ class IdTag
          */
     }
 
+    /**
+     * Read expected value from file an return data converted to integer or
+     * data not manipulated.
+     *
+     * @param [Integer] $length Bity count
+     *
+     * @param [Integer] $type expected value is [Hex|Bin|SyncBin]
+     *
+     * @return [Integer]
+     */
     protected function readFromFile ( $length, $type = null )
     {
-        $data = fread($this->file_handle, (int) $length);
-        switch ($type) {
-        case "bin":
-            return $this->bin2int($data);
-            break;
-        case "hex":
-            return $this->hex2int($data);
-            break;
+        if ( $length > 0 ) {
+            $data = fread($this->file_handle, (int) $length);
+            switch ($type) {
+            case "bin":
+                return $this->bin2int($data);
+                break;
+            case "hex":
+                return $this->hex2int($data);
+                break;
 
-        case "sync":
-            return $this->syncbin2dec($data);
-            break;
-        default :
-            return $data;
+            case "sync":
+                return $this->syncbin2dec($data);
+                break;
+            default :
+                return $data;
+            }
         }
     }
 
@@ -418,7 +518,7 @@ class IdTag
      *
      * @param [BINÄR] $syncbin (vorzeichenloser Long-Typ (immer 32 Bit, Byte-Folge Big Endian)
      *
-     * @return [INTEGER]
+     * @return [Integer]
      */
     protected function syncbin2dec ( $sync )
     {
@@ -433,7 +533,6 @@ class IdTag
                 $bin += $data[1] << 7 * ( $sync_length - $i - 1 );
             }
         };
-
         return $bin;
     }
 
@@ -458,7 +557,6 @@ class IdTag
             $tmp2 = $tmp & ($mask << 7 * $i);
             $bin += $tmp2 << 1 * $i;
         }
-
         return pack('N', $bin);
     }
 
@@ -469,15 +567,13 @@ class IdTag
 
     protected function hex2int ( $hex )
     {
-        $data = unpack('h', $hex);
-        return (int) $data[1];
+        if ($hex != null) {
+            $data = unpack('h', $hex);
+            return (int) $data[1];
+        } else {
+            return null;
+        }
     }
-
-    public function __destruct ()
-    {
-//        fclose($this->file_handle);
-    }
-
 }
 
 ?>

@@ -2,21 +2,22 @@
 
 class Artist extends Rule
 {
-    public function trigger ( &$all_frames )
+    public function trigger ( &$all_frames , $file)
     {
         $this->frames = &$all_frames;
 
-        $a_search[] = "/alien ant farm/";
-        $a_replace[] = "Alien Ant Farm";
-        $this->setArtist( preg_replace($a_search, $a_replace, $this->getArtist()));
+        $a_search[] = "/\(/";
+        $a_replace[] = "[";
 
-//        $search[] = "/\((.+)\)/";
-//        $replace[] = "[$1]";
-//
-//        foreach ($all_frames as $key => $value) {
-//            if (substr($key, 0,1) == "T") {
-//                $all_frames[$key]["tag_body"] = preg_replace($search, $replace, $value["tag_body"]);
-//            }
-//        }
+        $a_search[] = "/\)/";
+        $a_replace[] = "]";
+
+        $a_search[] = "/[fF]eat\./";
+        $a_replace[] = "ft.";
+
+        $a_search[] = "/hammerfall/";
+        $a_replace[] = "Hammerfall";
+
+        $this->renameAllTextTags($a_search, $a_replace);
     }
 }

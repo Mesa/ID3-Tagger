@@ -44,7 +44,7 @@ class Worker
                 $this->rules[] = new $class_name( $this );
             }
         } else {
-            throw new Exception("Der Ordner mit den Regeln wurde nicht gefunden");
+            throw new Exception("Rule Folder dosen't exist.");
         }
     }
 
@@ -60,7 +60,8 @@ class Worker
                 if (is_dir($dir . $entry) and !preg_match($this->ignore_dirs,$entry)) {
                     $this->scanFolder($dir . $entry . DS);
                 } elseif (preg_match($this->file_matcher, $entry)) {
-                    echo "[FILE] " . $entry. " ";
+                    $this->current_dir = $dir;
+                    $this->current_file = $entry;
                     $this->loadTag($dir . $entry);
                 }
             }
@@ -77,10 +78,13 @@ class Worker
         $all_frames = $this->tagger->getAllFrames();
 
         foreach ($this->rules as $obj) {
-            $obj->trigger($all_frames);
-            echo "|";
+            $obj->trigger($all_frames, $file);
         }
-        $this->tagger->saveTag($all_frames);
-        echo "\n";
+
+        $this->tagger->saveTag(
+            $all_frames,
+            $this->current_dir,
+            $this->current_file
+        );
     }
 }
