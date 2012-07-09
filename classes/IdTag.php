@@ -90,79 +90,99 @@ class IdTag
 
     }
 
+    protected function createIdTagV24Header ()
+    {
+        $header = "ID3";
+        $header .= pack('hhC', 0x04, 0x00, decbin(0));
+        return $header;
+    }
+
+    protected function createTag( $array )
+    {
+        $all_frames = "";
+        foreach ($array as $frame) {
+            $tmp = $this->writeFrame($frame);
+            if ($tmp !== false) {
+                $all_frames .= $tmp;
+            }
+            $tmp = "";
+        }
+
+        $new_tag_length = strlen($all_frames) + 10;
+        if ( $new_tag_length == 10) {
+            /**
+             * exit if no frames was added
+             */
+            return "";
+        }
+
+        if ($new_tag_length < $this->tag_size) {
+            $new_tag_size = $this->tag_size;
+            $spacing = $this->tag_size - $new_tag_length;
+        } else {
+            $new_tag_size = $new_tag_length + $this->new_padding;
+            $spacing = $this->new_padding;
+        }
+
+        $new_tag =
+            $this->createIdTagV24Header()
+            . $this->dec2syncbin($new_tag_size)
+            . $all_frames
+            . $this->createPadding($spacing);
+
+        return $new_tag;
+    }
+
+    protected function writeIntoFile( $idTag )
+    {
+        rewind($this->file_handle);
+        fwrite($this->file_handle, $idTag, strlen($idTag));
+    }
+
+    protected function writeNewFile( $idTag )
+    {
+        if ( $this->file_size <= 0 ) {
+            $this->file_size = filesize($this->file_path);
+        }
+
+        fseek($this->file_handle, $this->tag_size);
+
+        $music = fread($this->file_handle, $this->file_size);
+        rewind($this->file_handle);
+        fwrite($this->file_handle, $idTag . $music);
+    }
+
     public function saveTag ( $array )
     {
-        if ($array != $this->frames or ($this->has_tag_v2 == false and $this->has_tag_v1 == true )) {
+        echo " ";
+        if ($array != $this->frames or (!$this->has_tag_v2 and $this->has_tag_v1) ) {
            /**
-            * only write changes to file, if Array has changed. Or data is from
-            * Tag V1.
+            * only write changes to file, if Array has changed, or data is from
+            * Tag V1 and no V2 Tag exists.
             */
-                $header = "ID3";
-                $header .= pack('hhc', 0x04, 0x00, decbin(0));
-                $data = "";
-                foreach ($array as $frame) {
-                    $tmp = $this->writeFrame($frame);
-                    if ($tmp !== false) {
-                        $data .= $tmp;
-                    }
-                    $tmp = "";
-                }
-                $old_tag_size = $this->tag_size;
-
-                $new_tag_length = strlen($data) + 10;
-
-                if ($new_tag_length <= $old_tag_size) {
-                    /**
-                    * There is enough space for the new id tag
-                    * reset filepointer and write our new tag.
-                    */
-                    $spacing = $old_tag_size - $new_tag_length;
-
-                    $header .= $this->dec2syncbin($old_tag_size);
-                    $new_tag = $header . $data;
-
-                    fseek($this->file_handle, 0);
-                    fwrite($this->file_handle, $new_tag . $this->createPadding($spacing), $old_tag_size);
-//                    fclose($this->file_handle);
-                    $this->file_handle = null;
-                } elseif ($new_tag_length > $old_tag_size) {
-                    /**
-                    * Not enough space, create new file with more padding
-                    */
-
-                    $header .= $this->dec2syncbin(strlen($data) + 10 + $this->new_padding);
-                    $new_tag = $header . $data;
-
-                    fseek($this->file_handle, $old_tag_size);
-                    $this->file_size = filesize($this->file_path);
-
-                    if ( $this->file_size > 0 ) {
-                        $musik_bin = fread($this->file_handle, $this->file_size);
-                        rewind($this->file_handle);
-                        fwrite($this->file_handle,$new_tag . $this->createPadding($this->new_padding) . $musik_bin);
-                    } else {
-                        echo "\ngrml, Filesize was zero. Skipped changes for $this->file_path $this->file_path\n";
-                    }
-//                    fclose($this->file_handle);
-                    $this->file_handle = null;
-                }
-                echo "W";
+           $idTag = $this->createTag( $array );
+           $tag_size = strlen($idTag) - 1;
+           
+           if ( $tag_size == $this->tag_size and $tag_size > 11) {
+               $this->writeIntoFile($idTag);
+               echo "W";
+           } else {
+               $this->writeNewFile($idTag);
+               echo "c";
+           }
         } else {
-            if ($this->removeV1Tag()) {
-                echo "R";
-            } else {
-                echo ".";
-            }
+            echo ".";
+        }
+
+        if ( $this->has_tag_v1 and $this->remove_v1) {
+            $this->removeV1Tag();
+            echo "R";
         }
     }
 
     protected function removeV1Tag()
     {
-        if ($this->has_tag_v1 && $this->remove_v1) {
-            return ftruncate($this->file_handle, filesize($this->file_path) - 128);
-        } else {
-            return false;
-        }
+        ftruncate($this->file_handle, filesize($this->file_path) - 128);
     }
 
     protected function writeFrame ( $array )
@@ -177,30 +197,13 @@ class IdTag
             if (substr(trim($array["tag_name"]), 0, 1) == "T") {
                 if ( !isset($array["tag_enc"]) ) {
 
-                    $encoding = mb_detect_encoding($array["tag_body"]);
-
-                    switch ($encoding)
-                    {
-                    case "UTF-8":
-                        $encoding = IdTag::UTF8ENCODING;
-                        break;
-
-                    case "UTF-16":
-                        $encoding = IdTag::UTF16ENCODING1;
-                        break;
-
-                    default:
-                        $encoding = IdTag::ISOENCODING;
-                        break;
-                    }
-
                     $array["tag_body"] = $this->convertEncoding(
                         $array["tag_body"],
                         IdTag::UTF8ENCODING
                     );
                     $array["tag_enc"] = IdTag::UTF8ENCODING;
                 }
-                $frame_body .= pack('C', dechex($array["tag_enc"]));
+                $frame_body .= pack('C', $array["tag_enc"]);
             }
 
             $frame_body .= $array["tag_body"];
@@ -209,9 +212,11 @@ class IdTag
 
             $frame_header = strtoupper($array["tag_name"]);
             $frame_header .= $this->dec2syncbin($frame_length);
+
             if (!isset($array["tag_flag_1"])) {
                 $array["tag_flag_1"] = 0;
             }
+
             if (!isset($array["tag_flag_2"])) {
                 $array["tag_flag_2"] = 0;
             }
@@ -219,8 +224,8 @@ class IdTag
             $frame_header
                 .= pack(
                     'HH',
-                    dechex($array["tag_flag_1"]),
-                    dechex($array["tag_flag_2"])
+                    $array["tag_flag_1"],
+                    $array["tag_flag_2"]
                 );
 
             $data = $frame_header . $frame_body;
@@ -242,9 +247,12 @@ class IdTag
         $this->header_flag_footer   = false;
         $this->header_flag_usync    = false;
         $this->tag_padding          = 0;
+        $this->tag_size             = 0;
+        $this->tag_version          = null;
         $this->frames               = array();
         $this->file_path            = null;
         $this->has_tag_v1           = false;
+        $this->has_tag_v2           = false;
 
         if ($this->file_handle != null) {
             fclose($this->file_handle);
@@ -288,6 +296,9 @@ class IdTag
         }
     }
 
+    /**
+     * get Information for ID Tag V1
+     */
     protected function loadTagV1 ()
     {
         fseek($this->file_handle, -128, SEEK_END);
@@ -296,18 +307,23 @@ class IdTag
 
             $title = fread($this->file_handle, 30);
             $this->frames["TIT2"]["tag_body"] = $title;
+            $this->frames["TIT2"]["tag_name"] = "TIT2";
 
             $artist = fread($this->file_handle, 30);
             $this->frames["TPE1"]["tag_body"] = $artist;
+            $this->frames["TPE1"]["tag_name"] = "TPE1";
 
             $album = fread($this->file_handle, 30);
             $this->frames["TALB"]["tag_body"] = $album;
+            $this->frames["TALB"]["tag_name"] = "TALB";
 
             $year = fread($this->file_handle, 4);
             $this->frames["TYER"]["tag_body"] = $year;
+            $this->frames["TYER"]["tag_name"] = "TYER";
 
             $comment = fread($this->file_handle, 30);
-            $this->frames["TALB"]["tag_body"] = $comment;
+            $this->frames["COMM"]["tag_body"] = $comment;
+            $this->frames["COMM"]["tag_name"] = "COMM";
         } else {
             $this->has_tag_v1 = false;
         }
@@ -377,6 +393,7 @@ class IdTag
         } else {
             $this->has_tag_v2 = false;
             $this->tag_version = "";
+            $this->tag_size = 0;
         }
     }
 
@@ -384,9 +401,10 @@ class IdTag
     {
         $data = array();
 
-        $data["tag_name"] = $this->readFromFile(4);
-        $tag_name = $data["tag_name"];
+        $tag_name = $this->readFromFile(4);
+//        $tag_name = $data["tag_name"];
         if (preg_match('/^[A-Z][A-Z0-9]{3}$/', $tag_name)) {
+            $data["tag_name"] = $tag_name;
 
             $data["tag_size"] = $this->readFromFile(4, "sync");
             $data["tag_flag_1"] = $this->readFromFile(1, "hex");
@@ -576,4 +594,3 @@ class IdTag
     }
 }
 
-?>

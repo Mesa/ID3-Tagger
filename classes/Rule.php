@@ -40,7 +40,7 @@ abstract class Rule
 
     protected function setBand ( $name )
     {
-        $this->frames["TP E2"]["tag_body"] = $name;
+        $this->frames["TPE2"]["tag_body"] = $name;
     }
 
     protected function getConductor ()
