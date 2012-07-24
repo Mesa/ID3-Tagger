@@ -1,6 +1,8 @@
 <?php
 
 /**
+ * Class to read all ID3 Tag information from file.
+ *
  * @author Mesa <mesa@xebro.de>
  */
 class IdTag
@@ -72,11 +74,23 @@ class IdTag
     protected $has_tag_v1       = false;
     protected $has_tag_v2       = false;
 
+    /**
+     * Get all Id3 Tag Frames
+     *
+     * @return [Array]
+     */
     public function getAllFrames ()
     {
         return $this->frames;
     }
 
+    /**
+     * Set ID3 V1 handling.
+     *
+     * @param [String] $action remove == rm Tag, default leave it as it is.
+     *
+     * @return void
+     */
     public function setV1TagHandling ( $action )
     {
         if ( strtolower($action) == "remove") {
@@ -87,6 +101,17 @@ class IdTag
 
     }
 
+    /**
+     * Create File header.
+     *
+     * Header content:
+     * ID3  Name
+     * 0x04 Major Version
+     * 0x00 Minor Version
+     * 0    Flags
+     *
+     * @return Header data
+     */
     protected function createIdTagV24Header ()
     {
         $header = "ID3";
@@ -94,6 +119,13 @@ class IdTag
         return $header;
     }
 
+    /**
+     * Create Tag from Array
+     *
+     * @param [Array] $array Frame data
+     *
+     * @return Frame string
+     */
     protected function createTag( $array )
     {
         $all_frames = "";
@@ -121,8 +153,8 @@ class IdTag
             $spacing = $this->new_padding;
         }
 
-        $new_tag =
-            $this->createIdTagV24Header()
+        $new_tag
+            = $this->createIdTagV24Header()
             . $this->dec2syncbin($new_tag_size)
             . $all_frames
             . $this->createPadding($spacing);
@@ -130,12 +162,26 @@ class IdTag
         return $new_tag;
     }
 
+    /**
+     * Overwrite existing data in File
+     *
+     * @param [String] $idTag ID3 Data
+     *
+     * @return void
+     */
     protected function writeIntoFile( $idTag )
     {
         rewind($this->file_handle);
         fwrite($this->file_handle, $idTag, strlen($idTag));
     }
 
+    /**
+     * Create new file, because our new Tag is bigger than the old one + padding.
+     *
+     * @param [String] $idTag
+     *
+     * @return void
+     */
     protected function writeNewFile( $idTag )
     {
         if ( $this->file_size <= 0 ) {
@@ -149,24 +195,31 @@ class IdTag
         fwrite($this->file_handle, $idTag . $music);
     }
 
+    /**
+     * Check and save changes or ignore when nothing has changed
+     *
+     * @param [Array] $array Id Tag frames
+     *
+     * @return void
+     */
     public function saveTag ( $array )
     {
         echo " ";
         if ($array != $this->frames or (!$this->has_tag_v2 and $this->has_tag_v1) ) {
-           /**
-            * only write changes to file, if Array has changed, or data is from
-            * Tag V1 and no V2 Tag exists.
-            */
-           $idTag = $this->createTag( $array );
-           $tag_size = strlen($idTag) - 1;
+            /**
+             * only write changes to file, if Array has changed, or data is from
+             * Tag V1 and no V2 Tag exists.
+             */
+            $idTag = $this->createTag($array);
+            $tag_size = strlen($idTag) - 1;
 
-           if ( $tag_size == $this->tag_size and $tag_size > 11) {
-               $this->writeIntoFile($idTag);
-               echo "W";
-           } else {
-               $this->writeNewFile($idTag);
-               echo "c";
-           }
+            if ( $tag_size == $this->tag_size and $tag_size > 11) {
+                $this->writeIntoFile($idTag);
+                echo "W";
+            } else {
+                $this->writeNewFile($idTag);
+                echo "c";
+            }
         } else {
             echo ".";
         }
@@ -177,11 +230,23 @@ class IdTag
         }
     }
 
+    /**
+     * remove last 128 byte from file and delete Tag V1
+     *
+     * @return void
+     */
     protected function removeV1Tag()
     {
         ftruncate($this->file_handle, filesize($this->file_path) - 128);
     }
 
+    /**
+     * Create string from frame data
+     *
+     * @param [Array] $array Frame data
+     *
+     * @return [string|boolean] on error false, else frame data string
+     */
     protected function writeFrame ( $array )
     {
         if (isset($array["tag_name"])
@@ -263,6 +328,8 @@ class IdTag
      * @param [String] $file_path Path to mp3 file.
      *
      * @throws IdTagException
+     *
+     * @return void
      */
     public function loadTags ( $file_path )
     {
@@ -295,6 +362,8 @@ class IdTag
 
     /**
      * get Information for ID Tag V1
+     *
+     * @return void
      */
     protected function loadTagV1 ()
     {
@@ -344,6 +413,8 @@ class IdTag
     }
     /**
      * Count padding after Tag. Padding is always a hex zero.
+     *
+     * @return void
      */
     protected function getPadding ()
     {
@@ -354,6 +425,8 @@ class IdTag
 
     /**
      * Read the first 10 bytes from file
+     *
+     * @return void
      */
     protected function loadHeader ()
     {
@@ -361,10 +434,10 @@ class IdTag
 
         if ($version == "ID3") {
             $version2 = (int) $this->readFromFile(1, "hex");
-            if ($version2 > 0) {
 
-            $this->tag_version
-                = "ID3.2" . $version2 . $this->readFromFile(1, "hex");
+            if ($version2 > 0) {
+                $this->tag_version
+                    = "ID3.2" . $version2 . $this->readFromFile(1, "hex");
             }
             $flags = $this->readFromFile(1);
 
@@ -394,12 +467,16 @@ class IdTag
         }
     }
 
+    /**
+     * Read one frame from file
+     *
+     * @return [Boolean] on error === false
+     */
     protected function readFrame ()
     {
         $data = array();
 
         $tag_name = $this->readFromFile(4);
-//        $tag_name = $data["tag_name"];
         if (preg_match('/^[A-Z][A-Z0-9]{3}$/', $tag_name)) {
             $data["tag_name"] = $tag_name;
 
@@ -427,6 +504,8 @@ class IdTag
     /**
      * Create Array from Tag frame.
      *
+     * @param [String] $data Binary data from file.
+     *
      * @return [Array]
      */
     protected function readTextFrame ( $data )
@@ -442,7 +521,9 @@ class IdTag
             if ($this->change_encoding) {
                 $tag["tag_body"]
                     = $this->convertEncoding(
-                        substr($tag_body, 0, strlen($tag_body) - 1), IdTag::UTF8ENCODING, "ISO-8859-1"
+                        substr($tag_body, 0, strlen($tag_body) - 1),
+                        IdTag::UTF8ENCODING,
+                        "ISO-8859-1"
                     );
                 $tag["tag_enc"] = IdTag::UTF8ENCODING;
             } else {
@@ -468,8 +549,20 @@ class IdTag
         return $tag;
     }
 
-    protected function convertEncoding ( $frame_data, $to_encoding, $from_encoding = "auto" )
-    {
+    /**
+     * convert data encoding
+     *
+     * @param [String]  $frame_data    Frame data
+     * @param [Integer] $to_encoding   Encode to (UTF-8|UTF-16|ISO)
+     * @param [String]  $from_encoding Encode from
+     *
+     * @return [String] String with changed encoding
+     */
+    protected function convertEncoding (
+        $frame_data,
+        $to_encoding,
+        $from_encoding = "auto"
+    ) {
         $string = array();
 
         switch ($to_encoding) {
@@ -503,7 +596,7 @@ class IdTag
      *
      * @param [Integer] $length Bit count
      *
-     * @param [String] $type expected value is [Hex|Bin|SyncBin]
+     * @param [String]  $type   expected value is [Hex|Bin|SyncBin]
      *
      * @return [Integer]
      */
@@ -531,7 +624,8 @@ class IdTag
     /**
      * Convert sync safe binary (4 bytes) to decimal integer.
      *
-     * @param [Integer] $syncbin (vorzeichenloser Long-Typ (immer 32 Bit, Byte-Folge Big Endian)
+     * @param [Integer] $sync
+     * (vorzeichenloser Long-Typ (immer 32 Bit, Byte-Folge Big Endian)
      *
      * @return [Integer]
      */
@@ -555,16 +649,17 @@ class IdTag
      * Convert decimal integer to 4 byte long sync safe binary.
      * (Besonderheit ist das die 8. Stelle IMMER "0" ist)
      *
-     * @param [Integer] $bin decimal integer to convert (vorzeichenloser Long-Typ (immer 32 Bit, Byte-Folge Big Endian) )
+     * @param [Integer] $dec decimal integer to convert
+     * (vorzeichenloser Long-Typ (immer 32 Bit, Byte-Folge Big Endian) )
      *
      * @return 32 Bit Binary
      */
     protected function dec2syncbin ( $dec )
     {
         $byte_length = strlen(decbin($dec));
-       /**
-        * create Bit mask. Set all 7 bits to 1
-        */
+        /**
+         * create Bit mask. Set all 7 bits to 1
+         */
         $mask = 127;
         $bin = 0;
 
