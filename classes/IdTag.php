@@ -1,7 +1,6 @@
 <?php
 
 /**
- *
  * @author Mesa <mesa@xebro.de>
  */
 class IdTag
@@ -30,8 +29,6 @@ class IdTag
     protected $file_handle      = null;
     protected $file_extension   = null;
     protected $file_path        = null;
-//    protected $dir_name         = null;
-//    protected $path_to_file     = null;
     protected $file_size        = null;
 
     /**
@@ -162,7 +159,7 @@ class IdTag
             */
            $idTag = $this->createTag( $array );
            $tag_size = strlen($idTag) - 1;
-           
+
            if ( $tag_size == $this->tag_size and $tag_size > 11) {
                $this->writeIntoFile($idTag);
                echo "W";
@@ -501,12 +498,12 @@ class IdTag
     }
 
     /**
-     * Read expected value from file an return data converted to integer or
+     * Read expected value from file and return data converted to integer or
      * data not manipulated.
      *
-     * @param [Integer] $length Bity count
+     * @param [Integer] $length Bit count
      *
-     * @param [Integer] $type expected value is [Hex|Bin|SyncBin]
+     * @param [String] $type expected value is [Hex|Bin|SyncBin]
      *
      * @return [Integer]
      */
@@ -532,9 +529,9 @@ class IdTag
     }
 
     /**
-     * Entfernt jede 8. Stelle aus dem übergeben 4 Byte langen Binärcode
+     * Convert sync safe binary (4 bytes) to decimal integer.
      *
-     * @param [BINÄR] $syncbin (vorzeichenloser Long-Typ (immer 32 Bit, Byte-Folge Big Endian)
+     * @param [Integer] $syncbin (vorzeichenloser Long-Typ (immer 32 Bit, Byte-Folge Big Endian)
      *
      * @return [Integer]
      */
@@ -555,21 +552,23 @@ class IdTag
     }
 
     /**
-     * Binären String in Synchsafe integer umwandeln
+     * Convert decimal integer to 4 byte long sync safe binary.
      * (Besonderheit ist das die 8. Stelle IMMER "0" ist)
      *
-     * @param [Integer] $bin Dezimalwert der in einen Syncsafe Binärwert umgewandelt werden soll (vorzeichenloser Long-Typ (immer 32 Bit, Byte-Folge Big Endian) )
+     * @param [Integer] $bin decimal integer to convert (vorzeichenloser Long-Typ (immer 32 Bit, Byte-Folge Big Endian) )
      *
      * @return 32 Bit Binary
      */
     protected function dec2syncbin ( $dec )
     {
-        /**
-        * alle 7 Bits auf 1 setzen
-        */
         $byte_length = strlen(decbin($dec));
+       /**
+        * create Bit mask. Set all 7 bits to 1
+        */
         $mask = 127;
         $bin = 0;
+
+        /** bit shift with 7 characters. */
         for ($i=0; $i < $byte_length / 7; $i++) {
             $tmp = $dec;
             $tmp2 = $tmp & ($mask << 7 * $i);
